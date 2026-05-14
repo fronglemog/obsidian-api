@@ -4129,14 +4129,20 @@ export class Menu extends Component implements CloseableComponent {
     /**
      * Adds a menu item. Only works when menu is not shown yet.
      * @public
+     * @since 0.15.3
      */
     addItem(cb: (item: MenuItem) => any): this;
     /**
      * Adds a separator. Only works when menu is not shown yet.
      * @public
+     * @since 0.15.3
      */
     addSeparator(): this;
-
+    /**
+     * @public
+     * @since 0.16.0
+     */
+    setParentElement(el: HTMLElement): this;
     /**
      * @public
      * @since 0.12.6
@@ -4183,15 +4189,18 @@ export class MenuItem {
      * @param icon - ID of the icon, can use any icon loaded with {@link addIcon} or from the built-in lucide library.
      * @see The Obsidian icon library includes the {@link https://lucide.dev/ Lucide icon library}, any icon name from their site will work here.
      * @public
+     * @since 0.16.2
      */
     setIcon(icon: IconName | null): this;
 
     /**
      * @public
+     * @since 0.16.2
      */
     setChecked(checked: boolean | null): this;
     /**
      * @public
+     * @since 0.15.0
      */
     setDisabled(disabled: boolean): this;
     /**
@@ -4217,6 +4226,7 @@ export class MenuItem {
      * To find the section IDs of an existing menu, inspect the DOM elements
      * to see their `data-section` attribute.
      * @public
+     * @since 0.15.3
      */
     setSection(section: string): this;
 
@@ -5556,9 +5566,31 @@ export class Setting {
      */
     components: BaseComponent[];
     /**
+     * Error message element shown below the input. Lives inside `controlEl`
+     * as a wrapped flex child; `controlEl`'s implicit min-content width keeps
+     * the input row from wrapping so only the error claims its own line.
+     * Lazily created by {@link setErrorMessage}.
+     * @public
+     * @since 1.13.0
+     */
+    errorEl: HTMLElement | null;
+    /**
      * @public
      */
     constructor(containerEl: HTMLElement);
+    /**
+     * Show a persistent validation error message below the setting. Pass an
+     * empty string or `null` to clear it. Adds the `is-invalid` class to the
+     * setting row when a message is present.
+     * @public
+     * @since 1.13.0
+     */
+    setErrorMessage(message: string | null): this;
+    /**
+     * @public
+     * @since 0.9.7
+     */
+    setName(name: string): this;
     /**
      * @public
      * @since 0.12.16
@@ -5680,7 +5712,7 @@ export interface SettingColorControl<K extends string = string> extends SettingC
  * @public
  * @since 1.13.0
  */
-export type SettingControl<K extends string = string> = SettingToggleControl<K> | SettingDropdownControl<K> | SettingTextControl<K> | SettingSliderControl<K> | SettingColorControl<K>;
+export type SettingControl<K extends string = string> = SettingToggleControl<K> | SettingDropdownControl<K> | SettingTextControl<K> | SettingTextAreaControl<K> | SettingNumberControl<K> | SettingFileControl<K> | SettingFolderControl<K> | SettingSliderControl<K> | SettingColorControl<K>;
 
 /**
  * @public
@@ -5699,6 +5731,25 @@ export interface SettingControlBase<V, K extends string = string> {
      * @since 1.13.0
      */
     defaultValue?: V;
+    /**
+     * Validate a candidate value before it is persisted. Return a non-empty
+     * string to reject the change and surface it as an inline error message
+     * below the setting; return void/empty/undefined to accept and persist.
+     *
+     * Primarily intended for text-bearing controls (`text`, `textarea`,
+     * `number`, `file`, `folder`) where the user can enter values the bind's
+     * type alone can't constrain.
+     *
+     * The stored value may already be invalid when the setting is rendered
+     * (e.g. data from a previous version of your plugin). The framework
+     * runs `validate` once on mount and shows the message if the seeded
+     * value fails; it does not modify or replace the stored value. Plugins
+     * that need to enforce invariants on stored data should validate again
+     * when reading their settings.
+     * @public
+     * @since 1.13.0
+     */
+    validate?: (value: V) => string | void | Promise<string | void>;
 }
 
 /**
@@ -5964,12 +6015,12 @@ export interface SettingDefinitionPage<K extends string = string> {
      */
     desc?: string | DocumentFragment;
     /**
-     * Inline items rendered as a declarative sub-page. Can include groups.
-     * Mutually exclusive with `page`.
+     * Inline items rendered as a declarative sub-page. Can include groups
+     * and nested pages. Mutually exclusive with `page`.
      * @public
      * @since 1.13.0
      */
-    items?: (SettingDefinition<K> | SettingDefinitionGroup<K>)[];
+    items?: SettingDefinitionItem<K>[];
     /**
      * Factory for a custom {@link SettingPage} subclass. Use this when the
      * sub-page is rendered imperatively rather than from a list of
@@ -6026,10 +6077,72 @@ export interface SettingDropdownControl<K extends string = string> extends Setti
 }
 
 /**
+ * File-path input with a vault file suggester. Persists the selected file's path
+ * (a string).
+ * @public
+ * @since 1.13.0
+ */
+export interface SettingFileControl<K extends string = string> extends SettingControlBase<string, K> {
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    type: 'file';
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    placeholder?: string;
+    /**
+     * Optional filter — only files for which this returns truthy are suggested.
+     * @public
+     * @since 1.13.0
+     */
+    filter?: (file: TFile) => boolean;
+}
+
+/**
+ * Folder-path input with a vault folder suggester. Persists the selected folder's
+ * path (a string).
+ * @public
+ * @since 1.13.0
+ */
+export interface SettingFolderControl<K extends string = string> extends SettingControlBase<string, K> {
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    type: 'folder';
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    placeholder?: string;
+    /**
+     * Optional filter — only folders for which this returns truthy are suggested.
+     * @public
+     * @since 1.13.0
+     */
+    filter?: (folder: TFolder) => boolean;
+    /**
+     * Whether the vault root is offered as a suggestion. Default: false.
+     * @public
+     * @since 1.13.0
+     */
+    includeRoot?: boolean;
+}
+
+/**
  * @public
  * @since 1.11.0
  */
 export class SettingGroup {
+
+    /**
+     * @public
+     * @since 1.11.0
+     */
+    listEl: HTMLElement;
 
     /**
      * @public
@@ -6058,6 +6171,7 @@ export class SettingGroup {
      * @since 1.11.0
      */
     addSearch(cb: (component: SearchComponent) => any): this;
+
     /**
      * @public
      * @since 1.11.0
@@ -6072,6 +6186,40 @@ export class SettingGroup {
  * @since 1.13.0
  */
 export type SettingGroupItem<K extends string = string> = SettingDefinition<K> | SettingDefinitionPage<K>;
+
+/**
+ * Numeric text input. Persists a number; falls back to `defaultValue` (or `0`) if the
+ * input cannot be parsed.
+ * @public
+ * @since 1.13.0
+ */
+export interface SettingNumberControl<K extends string = string> extends SettingControlBase<number, K> {
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    type: 'number';
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    placeholder?: string;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    min?: number;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    max?: number;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    step?: number | 'any';
+}
 
 /**
  * Base class for a sub-page within a {@link SettingTab}. Use with the `page`
@@ -6225,6 +6373,30 @@ export abstract class SettingTab {
      * @public
      */
     hide(): void;
+}
+
+/**
+ * Multi-line text input. Persists a string.
+ * @public
+ * @since 1.13.0
+ */
+export interface SettingTextAreaControl<K extends string = string> extends SettingControlBase<string, K> {
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    type: 'textarea';
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    placeholder?: string;
+    /**
+     * Initial number of visible rows.
+     * @public
+     * @since 1.13.0
+     */
+    rows?: number;
 }
 
 /**
