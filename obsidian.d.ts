@@ -1350,10 +1350,25 @@ export class ButtonComponent extends BaseComponent {
      */
     removeCta(): this;
     /**
+     * @deprecated Use {@link setDestructive} for a destructive button, or
+     * `setDestructive().setCta()` for a destructive primary action.
      * @public
      * @since 0.11.0
      */
     setWarning(): this;
+    /**
+     * Style the button as destructive (e.g. for actions that delete data or are
+     * otherwise hard to undo). Compose with {@link setCta} for a destructive
+     * primary action.
+     * @public
+     * @since 1.13.0
+     */
+    setDestructive(): this;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    removeDestructive(): this;
     /**
      * @public
      * @since 1.1.0
@@ -1904,6 +1919,84 @@ export class Component {
      * @since 0.13.8
      */
     registerInterval(id: number): number;
+}
+
+/**
+ * A button inside a {@link ConfirmationModal}'s button row. Clicking the button
+ * closes the modal after the click handler resolves; return a truthy value from
+ * the handler to keep the modal open (for example, to surface a validation error).
+ * @public
+ * @since 1.13.0
+ */
+export class ConfirmationButton extends ButtonComponent {
+
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    onClick(handler: (evt: MouseEvent) => unknown | Promise<unknown>): this;
+    /**
+     * Mark this button as the focus target when the modal opens. If multiple
+     * buttons in the same modal have this set, the last-marked one wins.
+     * @public
+     * @since 1.13.0
+     */
+    setInitialFocus(): this;
+    /**
+     * Place the button separately from the main button group (e.g. for a
+     * tertiary action that shouldn't sit next to the primary/cancel pair).
+     * @public
+     * @since 1.13.0
+     */
+    setSecondary(): this;
+    /**
+     * Style the button as the dismissal action.
+     * @public
+     * @since 1.13.0
+     */
+    setCancel(): this;
+}
+
+/**
+ * A modal that asks the user to confirm an action. Use {@link addButton} to add
+ * each option to the button row, and {@link addCancelButton} for the dismissal
+ * button. Buttons auto-close the modal on click unless the handler returns truthy.
+ * @public
+ * @since 1.13.0
+ */
+export class ConfirmationModal extends Modal {
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    buttonContainerEl: HTMLElement;
+
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    constructor(app: App);
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    addClass(cls: string): this;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    addCheckbox(label: string, cb: (value: boolean) => any | Promise<any>): this;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    addButton(cb: (btn: ConfirmationButton) => any): this;
+    /**
+     * @public
+     * @since 1.13.0
+     */
+    addCancelButton(text?: string): this;
+
 }
 
 /** @public */
@@ -4775,6 +4868,13 @@ export abstract class Plugin extends Component {
      */
     manifest: PluginManifest;
     /**
+     * Plugin settings. Assign loaded data here in `onload`. Declare a
+     * concrete type on your subclass to type it.
+     * @public
+     * @since 1.13.0
+     */
+    settings?: unknown;
+    /**
      * @public
      */
     constructor(app: App, manifest: PluginManifest);
@@ -5003,17 +5103,31 @@ export interface PluginManifest {
  * @public
  * @since 0.9.7
  */
-export abstract class PluginSettingTab<T extends Record<string, any> = Record<string, any>> extends SettingTab {
+export abstract class PluginSettingTab extends SettingTab {
 
     /**
      * @public
      */
-    constructor(app: App, plugin: Plugin, settings?: T);
+    constructor(app: App, plugin: Plugin);
     /**
      * @public
      * @since 1.13.0
      */
-    getSettingDefinitions(): SettingDefinitionItem<keyof T & string>[];
+    getSettingDefinitions(): SettingDefinitionItem[];
+    /**
+     * Reads from `this.plugin.settings`. Override to read from a different
+     * data source.
+     * @public
+     * @since 1.13.0
+     */
+    getControlValue(key: string): unknown;
+    /**
+     * Mutates and persists `this.plugin.settings`. Override to write to a
+     * different data source.
+     * @public
+     * @since 1.13.0
+     */
+    setControlValue(key: string, value: unknown): void | Promise<void>;
 }
 
 /**
@@ -5720,7 +5834,8 @@ export type SettingControl<K extends string = string> = SettingToggleControl<K> 
  */
 export interface SettingControlBase<V, K extends string = string> {
     /**
-     * The config/storage property name used by getControlBinding.
+     * The config/storage property name passed to `getControlValue` and
+     * `setControlValue` on the setting tab.
      * @public
      * @since 1.13.0
      */
@@ -5750,28 +5865,15 @@ export interface SettingControlBase<V, K extends string = string> {
      * @since 1.13.0
      */
     validate?: (value: V) => string | void | Promise<string | void>;
-}
-
-/**
- * The resolved value and onChange handler for a setting control, as returned
- * by {@link SettingTab.getControlBinding}.
- * @public
- * @since 1.13.0
- */
-export interface SettingControlBinding {
     /**
-     * The current value of the control.
+     * Disables the control. Evaluated on each render, so a function form can
+     * reflect runtime state (e.g. whether another plugin is installed). Call
+     * `update()` on the setting tab to re-evaluate after the underlying state
+     * changes.
      * @public
      * @since 1.13.0
      */
-    value: any;
-    /**
-     * Handler invoked when the control's value changes. Persists the new value
-     * to the underlying data source.
-     * @public
-     * @since 1.13.0
-     */
-    onChange: (value: any) => any;
+    disabled?: boolean | (() => boolean);
 }
 
 /**
@@ -5791,6 +5893,13 @@ export interface SettingDefinitionAction extends SettingDefinitionBase {
      * @since 1.13.0
      */
     action: () => void;
+    /**
+     * Disables the row. Evaluated on each render. Call `update()` on the
+     * setting tab to re-evaluate.
+     * @public
+     * @since 1.13.0
+     */
+    disabled?: boolean | (() => boolean);
     /**
      * @public
      * @since 1.13.0
@@ -5838,6 +5947,15 @@ export interface SettingDefinitionBase {
      * @since 1.13.0
      */
     searchable?: boolean | (() => boolean);
+    /**
+     * Controls whether the item is rendered. `false` or `() => false` hides
+     * the item and also excludes it from search for that render cycle.
+     * Evaluated on each render; call `update()` on the setting tab to
+     * re-evaluate after the underlying state changes. Default: true.
+     * @public
+     * @since 1.13.0
+     */
+    visible?: boolean | (() => boolean);
 }
 
 /**
@@ -5981,6 +6099,14 @@ export interface SettingDefinitionGroup<K extends string = string> {
      * @since 1.13.0
      */
     onDelete?: (index: number) => void;
+    /**
+     * Controls whether the group is rendered. `false` or `() => false` hides
+     * the entire group (heading and items). Evaluated on each render.
+     * Default: true.
+     * @public
+     * @since 1.13.0
+     */
+    visible?: boolean | (() => boolean);
 }
 
 /**
@@ -6030,6 +6156,13 @@ export interface SettingDefinitionPage<K extends string = string> {
      * @since 1.13.0
      */
     page?: () => SettingPage;
+    /**
+     * Controls whether the page link is rendered. `false` or `() => false`
+     * hides the navigable entry. Evaluated on each render. Default: true.
+     * @public
+     * @since 1.13.0
+     */
+    visible?: boolean | (() => boolean);
 }
 
 /**
@@ -6048,10 +6181,14 @@ export interface SettingDefinitionRender extends SettingDefinitionBase {
      */
     action?: never;
     /**
+     * Renders the setting row imperatively.
+     *
+     * May return a cleanup function, invoked before the row is torn down.
+     * Not guaranteed to run when the host window is destroyed.
      * @public
      * @since 1.13.0
      */
-    render: (setting: Setting, group: SettingGroup) => void;
+    render: (setting: Setting, group: SettingGroup) => void | (() => void);
     /**
      * @public
      * @since 1.13.0
@@ -6077,8 +6214,9 @@ export interface SettingDropdownControl<K extends string = string> extends Setti
 }
 
 /**
- * File-path input with a vault file suggester. Persists the selected file's path
- * (a string).
+ * File-path input with a vault file suggester. Persists the selected file's
+ * full path including extension (e.g. `folder/note.md`). Resolve the saved
+ * path with `Vault.getFileByPath()`.
  * @public
  * @since 1.13.0
  */
@@ -6268,6 +6406,17 @@ export abstract class SettingPage {
      * @since 1.13.0
      */
     abstract display(): void;
+    /**
+     * Hides the contents of the page. Any registered components should be
+     * unloaded when the page is hidden. Override this if you need to perform
+     * additional cleanup.
+     * Called when the user navigates away, the containing tab is switched, or
+     * the settings modal is closed. Not guaranteed to run when the host window
+     * is destroyed.
+     * @public
+     * @since 1.13.0
+     */
+    hide(): void;
 }
 
 /**
@@ -6346,13 +6495,42 @@ export abstract class SettingTab {
      */
     update(): void;
     /**
-     * Get the value and onChange handler bound to a control's key.
-     * By default, reads/writes vault config. Subclasses like PluginSettingTab
-     * set configSource/configSave to bind to a different data source.
+     * Read the current value for a control key. Called on every render of a
+     * `control`-type setting definition.
+     *
+     * The default implementation reads from `this.app.vault.getConfig` —
+     * appropriate for the app's own setting tabs. `PluginSettingTab` and
+     * `InternalPluginSettingTab` override this to read from their conventional
+     * settings storage; plugins with custom storage override on their
+     * subclass.
      * @public
      * @since 1.13.0
      */
-    getControlBinding(key: string): SettingControlBinding;
+    getControlValue(key: string): unknown;
+    /**
+     * Persist a new value for a control key. Called on user change of a
+     * `control`-type setting definition.
+     *
+     * The default implementation writes to `this.app.vault.setConfig`.
+     * Override to persist elsewhere; pair with `getControlValue`.
+     * @public
+     * @since 1.13.0
+     */
+    setControlValue(key: string, value: unknown): void | Promise<void>;
+
+    /**
+     * Re-evaluate every `visible` and `disabled` predicate against the
+     * current state and apply the result to the rendered DOM. Call this
+     * from a `render` callback's onChange (or any other imperative path)
+     * after mutating state that other settings' predicates depend on.
+     *
+     * Cheap: toggles CSS state in place, no re-render. For changes that
+     * affect the structure of the definitions themselves (added or removed
+     * items), call `update()` instead.
+     * @public
+     * @since 1.13.0
+     */
+    refreshDomState(): void;
 
     /**
      * Override to render the tab imperatively.
