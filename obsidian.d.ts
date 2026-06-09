@@ -1931,6 +1931,11 @@ export class Component {
 export class ConfirmationButton extends ButtonComponent {
 
     /**
+     * Private constructor. Use {@link ConfirmationModal.addButton} instead.
+     * @public
+     */
+    private constructor();
+    /**
      * @public
      * @since 1.13.0
      */
@@ -1958,9 +1963,9 @@ export class ConfirmationButton extends ButtonComponent {
 }
 
 /**
- * A modal that asks the user to confirm an action. Use {@link addButton} to add
- * each option to the button row, and {@link addCancelButton} for the dismissal
- * button. Buttons auto-close the modal on click unless the handler returns truthy.
+ * A modal that asks the user to confirm an action. Use {@link ConfirmationModal.addButton}
+ * to add each option to the button row, and {@link ConfirmationModal.addCancelButton} for
+ * the dismissal button. Buttons auto-close the modal on click unless the handler returns truthy.
  * @public
  * @since 1.13.0
  */
